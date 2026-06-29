@@ -23,6 +23,7 @@ export SPLUNK_HEC_URL=https://ingest.${SPLUNK_REALM}.observability.splunkcloud.c
 ```
 
 Use the actual realm from the Splunk Observability Cloud organization.
+Keep the token outside Git. The generated Collector template quotes the runtime variables so token-like values stay strings when the Collector expands the environment.
 
 ## Collector
 
@@ -35,6 +36,8 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 python demo/agentops_otel_demo.py --output-dir evidence/latest-run
 ```
+
+The checked-in template was locally validated with `quay.io/signalfx/splunk-otel-collector:latest` and reached the Collector ready state without config errors. That validation used a dummy token and does not prove live Splunk ingestion.
 
 ## Splunk Readback Checklist
 

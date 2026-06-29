@@ -58,6 +58,6 @@ export SPLUNK_INGEST_URL=https://ingest.${SPLUNK_REALM}.observability.splunkclou
 export SPLUNK_HEC_URL=https://ingest.${SPLUNK_REALM}.observability.splunkcloud.com/v1/log
 ```
 
-Do not commit real access tokens. The Splunk collector file in `evidence/` is a template only.
+Do not commit real access tokens. The Splunk collector file in `evidence/` is a template only. The template has been locally validated with `quay.io/signalfx/splunk-otel-collector:latest`; live ingestion still requires a real Splunk Observability Cloud realm and ingest-scoped token.
 
 See `docs/splunk-observability-runbook.md` for the live-readback checklist.

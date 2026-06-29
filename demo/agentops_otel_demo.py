@@ -152,16 +152,16 @@ processors:
   batch:
 
 exporters:
-  otlphttp/splunk_traces:
-    traces_endpoint: ${SPLUNK_INGEST_URL}/v2/trace/otlp
+  otlp_http/splunk_traces:
+    traces_endpoint: "${SPLUNK_INGEST_URL}/v2/trace/otlp"
     headers:
-      X-SF-Token: ${SPLUNK_ACCESS_TOKEN}
+      X-SF-Token: "${SPLUNK_ACCESS_TOKEN}"
   signalfx:
-    access_token: ${SPLUNK_ACCESS_TOKEN}
-    realm: ${SPLUNK_REALM}
+    access_token: "${SPLUNK_ACCESS_TOKEN}"
+    realm: "${SPLUNK_REALM}"
   splunk_hec:
-    token: ${SPLUNK_ACCESS_TOKEN}
-    endpoint: ${SPLUNK_HEC_URL}
+    token: "${SPLUNK_ACCESS_TOKEN}"
+    endpoint: "${SPLUNK_HEC_URL}"
     source: agentops-otel-demo
     sourcetype: agentops:otel
 
@@ -170,7 +170,7 @@ service:
     traces:
       receivers: [otlp]
       processors: [resource/agentops, batch]
-      exporters: [otlphttp/splunk_traces]
+      exporters: [otlp_http/splunk_traces]
     metrics:
       receivers: [otlp]
       processors: [resource/agentops, batch]
