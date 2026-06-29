@@ -1,0 +1,32 @@
+# Optional collector template for Splunk Observability Cloud.
+# Do not commit real access tokens. Set SPLUNK_ACCESS_TOKEN outside Git.
+receivers:
+  otlp:
+    protocols:
+      http:
+      grpc:
+
+processors:
+  batch:
+
+exporters:
+  splunk_hec:
+    token: ${SPLUNK_ACCESS_TOKEN}
+    endpoint: https://ingest.<realm>.signalfx.com/v1/log
+    source: agentops-otel-demo
+    sourcetype: agentops:otel
+  otlphttp/splunk:
+    endpoint: https://ingest.<realm>.signalfx.com/v2/trace/otlp
+    headers:
+      X-SF-Token: ${SPLUNK_ACCESS_TOKEN}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/splunk]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [splunk_hec]

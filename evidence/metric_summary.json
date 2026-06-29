@@ -1,0 +1,39 @@
+{
+  "events_total": 26,
+  "cases_total": 3,
+  "human_approval_required": 5,
+  "blocked_events": 1,
+  "failed_events": 1,
+  "warning_events": 4,
+  "high_or_critical_risk_events": 3,
+  "cost_usd_estimate": 4.86,
+  "events_by_actor_type": {
+    "human": 7,
+    "ai_agent": 10,
+    "robot": 3,
+    "api": 3,
+    "system": 3
+  },
+  "events_by_phase": {
+    "intake": 3,
+    "planning": 3,
+    "evidence_collection": 6,
+    "investigation": 2,
+    "risk_review": 3,
+    "execution": 2,
+    "approval": 4,
+    "handoff": 3
+  },
+  "events_by_risk": {
+    "none": 6,
+    "low": 12,
+    "medium": 5,
+    "high": 2,
+    "critical": 1
+  },
+  "case_max_risk": {
+    "CASE-AI-OPS-001": "critical",
+    "CASE-DFIR-002": "high",
+    "CASE-CLOUD-003": "medium"
+  }
+}
