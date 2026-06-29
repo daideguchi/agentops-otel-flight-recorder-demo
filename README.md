@@ -12,7 +12,8 @@ It turns AI-agent operation events into OpenTelemetry spans and metrics.
 - one span per operation event
 - attributes for actor, phase, risk, decision, approval, and cost
 - metrics for event count, human approvals, blocked actions, risk score, duration, and estimated cost
-- an optional OpenTelemetry Collector template for Splunk Observability Cloud
+- an optional OpenTelemetry Collector gateway template for Splunk Observability Cloud
+- a generated Splunk Observability dashboard/readback plan
 
 ## Run Locally
 
@@ -40,7 +41,23 @@ Expected summary:
 
 ## Optional Splunk Export
 
-The demo works without cloud credentials. If you want to send traces to an OTLP endpoint, set OpenTelemetry environment variables such as `OTEL_EXPORTER_OTLP_ENDPOINT`.
+The demo works without cloud credentials. If you want to send traces and metrics to a local OpenTelemetry Collector, set OpenTelemetry environment variables such as:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+python demo/agentops_otel_demo.py --output-dir evidence/latest-run
+```
+
+The generated Collector template expects Splunk Observability Cloud values at runtime:
+
+```bash
+export SPLUNK_ACCESS_TOKEN=...
+export SPLUNK_REALM=...
+export SPLUNK_INGEST_URL=https://ingest.${SPLUNK_REALM}.observability.splunkcloud.com
+export SPLUNK_HEC_URL=https://ingest.${SPLUNK_REALM}.observability.splunkcloud.com/v1/log
+```
 
 Do not commit real access tokens. The Splunk collector file in `evidence/` is a template only.
 
+See `docs/splunk-observability-runbook.md` for the live-readback checklist.

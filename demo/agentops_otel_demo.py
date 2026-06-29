@@ -19,7 +19,7 @@ from typing import Any
 
 from opentelemetry import metrics, trace
 from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import ConsoleMetricExporter, PeriodicExportingMetricReader
+from opentelemetry.sdk.metrics.export import ConsoleMetricExporter, MetricReader, PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
@@ -78,12 +78,27 @@ def as_attributes(event: dict[str, Any]) -> dict[str, str | int | float | bool]:
     return attrs
 
 
-def maybe_add_otlp_processors(provider: TracerProvider) -> None:
-    if not os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
+def otlp_export_enabled(signal: str) -> bool:
+    return bool(os.getenv(f"OTEL_EXPORTER_OTLP_{signal.upper()}_ENDPOINT") or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+
+
+def maybe_add_otlp_span_processor(provider: TracerProvider) -> None:
+    if not otlp_export_enabled("traces"):
         return
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+
+
+def metric_readers() -> list[MetricReader]:
+    readers: list[MetricReader] = [
+        PeriodicExportingMetricReader(ConsoleMetricExporter(), export_interval_millis=300)
+    ]
+    if otlp_export_enabled("metrics"):
+        from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+
+        readers.append(PeriodicExportingMetricReader(OTLPMetricExporter(), export_interval_millis=300))
+    return readers
 
 
 def build_metrics(events: list[dict[str, Any]]) -> dict[str, Any]:
@@ -111,40 +126,98 @@ def build_metrics(events: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def write_splunk_collector_template(output_dir: Path) -> None:
-    template = """# Optional collector template for Splunk Observability Cloud.
-# Do not commit real access tokens. Set SPLUNK_ACCESS_TOKEN outside Git.
+    template = """# Optional gateway template for Splunk Observability Cloud.
+# Based on the Splunk OpenTelemetry Collector pattern:
+# - SPLUNK_ACCESS_TOKEN authenticates ingest.
+# - SPLUNK_REALM selects the Observability Cloud realm, for example us0.
+# - SPLUNK_INGEST_URL and SPLUNK_HEC_URL can be set explicitly when needed.
+# Do not commit real access tokens.
 receivers:
   otlp:
     protocols:
-      http:
       grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
 
 processors:
+  resource/agentops:
+    attributes:
+      - key: service.namespace
+        value: dd-ai-organization
+        action: upsert
+      - key: deployment.environment
+        value: zenn-splunk-observability-demo
+        action: upsert
   batch:
 
 exporters:
-  splunk_hec:
-    token: ${SPLUNK_ACCESS_TOKEN}
-    endpoint: https://ingest.<realm>.signalfx.com/v1/log
-    source: agentops-otel-demo
-    sourcetype: agentops:otel
-  otlphttp/splunk:
-    endpoint: https://ingest.<realm>.signalfx.com/v2/trace/otlp
+  otlphttp/splunk_traces:
+    traces_endpoint: ${SPLUNK_INGEST_URL}/v2/trace/otlp
     headers:
       X-SF-Token: ${SPLUNK_ACCESS_TOKEN}
+  signalfx:
+    access_token: ${SPLUNK_ACCESS_TOKEN}
+    realm: ${SPLUNK_REALM}
+  splunk_hec:
+    token: ${SPLUNK_ACCESS_TOKEN}
+    endpoint: ${SPLUNK_HEC_URL}
+    source: agentops-otel-demo
+    sourcetype: agentops:otel
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
-      exporters: [otlphttp/splunk]
+      processors: [resource/agentops, batch]
+      exporters: [otlphttp/splunk_traces]
+    metrics:
+      receivers: [otlp]
+      processors: [resource/agentops, batch]
+      exporters: [signalfx]
     logs:
       receivers: [otlp]
-      processors: [batch]
+      processors: [resource/agentops, batch]
       exporters: [splunk_hec]
 """
     (output_dir / "otel-collector-splunk-template.yaml").write_text(template, encoding="utf-8")
+
+
+def write_splunk_dashboard_plan(summary: dict[str, Any], output_dir: Path) -> None:
+    lines = [
+        "# Splunk Observability Dashboard Plan",
+        "",
+        "This plan is generated from the deterministic local demo. Use it as the checklist for the live Splunk Observability Cloud readback before publishing a Splunk-focused article.",
+        "",
+        "## Required Live Readback",
+        "",
+        "- APM / traces show `service.name=agentops-flight-recorder`.",
+        "- Trace attributes include `agentops.case_id`, `agentops.phase`, `agentops.actor_type`, `agentops.risk_level`, `agentops.decision`, and `agentops.human_approval_required`.",
+        "- Metrics show `agentops.events`, `agentops.approvals.required`, `agentops.blocked`, `agentops.cost.usd.estimate`, `agentops.duration.ms`, and `agentops.risk.score`.",
+        "- At least one blocked critical event is visible and traceable back to `CASE-AI-OPS-001`.",
+        "- The live screenshot or export must not expose `SPLUNK_ACCESS_TOKEN`.",
+        "",
+        "## Dashboard Cards",
+        "",
+        "| card | signal | split/filter | why it matters |",
+        "|---|---|---|---|",
+        "| AgentOps Event Volume | `agentops.events` | split by `phase`, `actor_type` | shows where agents, humans, APIs, and robots are doing work |",
+        "| Human Approval Load | `agentops.approvals.required` | split by `phase`, `risk_level` | shows where human judgment is still required |",
+        "| Policy Blocks | `agentops.blocked` | filter `status=blocked` | proves dangerous actions are stopped before execution |",
+        "| Estimated AI Cost | `agentops.cost.usd.estimate` | split by `phase`, `actor_type` | connects AI cost with operational workflow |",
+        "| Risk Distribution | `agentops.risk.score` | split by `case_id`, `risk_level` | makes high-risk work visible before incidents |",
+        "",
+        "## Local Demo Summary",
+        "",
+        "```json",
+        json.dumps(summary, ensure_ascii=False, indent=2),
+        "```",
+        "",
+        "## Stopline",
+        "",
+        "Do not claim live Splunk Observability ingestion until a real realm, ingest token, collector run, and UI readback have all been captured.",
+    ]
+    (output_dir / "splunk_observability_dashboard_plan.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def write_timeline(events: list[dict[str, Any]], output_dir: Path) -> None:
@@ -181,11 +254,10 @@ def configure_otel() -> tuple[trace.Tracer, metrics.Meter, TracerProvider, Meter
 
     trace_provider = TracerProvider(resource=resource)
     trace_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
-    maybe_add_otlp_processors(trace_provider)
+    maybe_add_otlp_span_processor(trace_provider)
     trace.set_tracer_provider(trace_provider)
 
-    metric_reader = PeriodicExportingMetricReader(ConsoleMetricExporter(), export_interval_millis=300)
-    meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
+    meter_provider = MeterProvider(resource=resource, metric_readers=metric_readers())
     metrics.set_meter_provider(meter_provider)
 
     return trace.get_tracer("agentops.zenn.demo"), metrics.get_meter("agentops.zenn.demo"), trace_provider, meter_provider
@@ -296,6 +368,7 @@ def main() -> int:
     )
     write_timeline(events, args.output_dir)
     write_splunk_collector_template(args.output_dir)
+    write_splunk_dashboard_plan(summary, args.output_dir)
 
     print(json.dumps({"status": "ok", "events": args.events.as_posix(), "output_dir": args.output_dir.as_posix(), **summary}, ensure_ascii=False, indent=2))
     return 0
